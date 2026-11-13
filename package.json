@@ -1,0 +1,15 @@
+{
+  "name": "idea-market-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/api",
+    "build": "npm run build --workspace=apps/api",
+    "migrate": "npm run migrate --workspace=apps/api",
+    "generate": "npm run generate --workspace=apps/api"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
