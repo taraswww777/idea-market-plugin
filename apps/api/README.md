@@ -56,7 +56,13 @@ http://localhost:3000         # Local development (HTTP)
   }
   ```
 
-### Plugins (Protected - requires JWT token in Authorization header)
+### Plugins (Protected - requires JWT token)
+- `GET /api/plugins` - List all plugins with pagination and search
+- `GET /api/plugins/:id` - Get plugin by ID
+- `GET /api/plugins/:id/download` - Download plugin (redirects to downloadUrl)
+
+### Admin Routes (Protected - ADMIN role required)
+- `GET /api/_protected` - Example protected route for ADMIN only
 #### List Plugins
 - `GET /api/plugins`
   Query params:
@@ -86,6 +92,22 @@ http://localhost:3000         # Local development (HTTP)
     "downloadUrl": "https://...",
     "version": "1.0.0",
     "authorId": "..."
+  }
+  ```
+
+#### Get Current User
+- `GET /api/auth/me`
+  Requires: Authentication (JWT token)
+  Response:
+  ```json
+  {
+    "status": "authenticated",
+    "user": {
+      "id": ",
+      "email": "user@example.com",
+      "role": "USER",
+      "name": "John Doe"
+    }
   }
   ```
 

@@ -7,6 +7,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  password      String   @map("password_hash")
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  /// Relation to plugins - a user can have multiple plugins
+  plugins       Plugin[] @relation("UserPlugins")
+}
+
 model Plugin {
   id              String   @id @default(cuid())
   name            String
@@ -18,28 +31,6 @@ model Plugin {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
-  author          User     @relation("UserToPlugin", fields: [authorId], references: [id])
-}
-
-model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String?
-  password      String   @map("password_hash")
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  plugins       Plugin[]
-}
-
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  authorId  String
-   
-  author    User         @relation("UserToPost", fields: [authorId], references: [id])
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  /// Opposite relation to User.plugins - links back to User
+  author          User     @relation("UserPlugins", fields: [authorId], references: [id])
 }
