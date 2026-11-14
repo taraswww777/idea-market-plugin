@@ -19,8 +19,13 @@ apps/api/
 │   ├── db.ts                 # PrismaClient singleton
 │   ├── config.ts             # Конфигурация из env
 │   ├── index.ts              # Main Fastify server
+│   ├── plugins/
+│   │   └── auth.ts           # Аутентификация (JWT, authenticate, requireRole)
 │   ├── repositories/
 │   │   └── plugin.repository.ts  # Repository для плагинов
+│   ├── services/
+│   │   ├── password.service.ts     # Hash/verify паролей
+│   │   └── jwt.service.ts          # JWT sign/verify
 │   └── routes/
 │       ├── health.ts         # GET /health
 │       └── plugins/
@@ -29,64 +34,101 @@ apps/api/
 │           └── download.ts   # GET /api/plugins/:id/download
 ```
 
-## 🔧 API Endpoints
+## 🔐 Аутентификация
+
+API использует JWT для аутентификации. 
+
+### Endpoints
+
+#### Регистрация
+```http
+POST https://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "name": "John Doe",
+  "password": "SecurePassword123!"
+}
+```
+
+#### Вход
+```http
+POST https://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!"
+}
+```
+
+### Использование JWT токена
+
+После успешного входа вы получите токен. Используйте его в заголовках:
+
+```http
+GET https://localhost:3000/api/plugins
+Authorization: Bearer <YOUR_TOKEN>
+```
+
+### Декораторы аутентификации
+
+В роутерах можно использовать декораторы:
+
+```typescript
+await server.register(authPlugin, { prefix: "/protected", prefixTrailingSlash: true });
+```
+
+#### `@authenticate()`
+- Проверяет наличие JWT токена в заголовке Authorization
+- Добавляет данные пользователя в `request.user`
+
+#### `@requireRole(['ADMIN', 'USER'])`
+- Проверяет роль пользователя
+- Возвращает 403 Forbidden, если роль не имеет прав
+
+### Роли пользователей
+
+- **ADMIN** - полный доступ ко всем функциям
+- **USER** - базовый доступ (просмотр, скачивание плагинов)
+
+## 📦 API Endpoints
 
 ### Health Check
 - `GET /health` - проверка работоспособности
-- `GET /` - информация о сервере
 
-### Плагины
+### Регистрация и вход
+- `POST /api/auth/register` - регистрация пользователя
+- `POST /api/auth/login` - вход в систему
+
+### Плагины (требуют аутентификации)
 - `GET /api/plugins` - список плагинов (пагинация, поиск)
 - `GET /api/plugins/:id` - плагин по ID
 - `GET /api/plugins/:id/download` - скачивание (302 редирект)
 
-## 📦 Query параметры (для списка)
-
-| Параметр   | Тип    | Описание                                      | Дефолт  | Максимум |
-|-------------|--------|----------------------------------------------|---------|----------|
-| q           | string | поисковый запрос (фильтр по name/description)| -       | -        |
-| page        | number | номер страницы                               | 1       | -        |
-| limit       | number | записей на странице                         | 20      | 100      |
-| sort        | string | поле сортировки: `name` или `createdAt`     | createdAt| -        |
-
 ## 📝 Примеры запросов
 
-### Список плагинов
+### Список плагинов с аутентификацией
 
 ```bash
-# Все плагин
-curl -k https://localhost:3000/api/plugins
-
-# Поиск по запросу
-curl -k "https://localhost:3000/api/plugins?q=dark&limit=10"
-
-# Пагинация
-curl -k "https://localhost:3000/api/plugins?page=2&limit=20"
-
-# Сортировка по имени
-curl -k "https://localhost:3000/api/plugins?sort=name"
+curl -k -H "Authorization: Bearer YOUR_TOKEN" \
+  https://localhost:3000/api/plugins
 ```
 
-### Получить плагин
+### Поиск плагинов
 
 ```bash
-curl -k https://localhost:3000/api/plugins/cuid-value-here
+curl -k -H "Authorization: Bearer YOUR_TOKEN" \
+  "https://localhost:3000/api/plugins?q=dark&limit=10"
 ```
 
-### Скачать плагин (редирект)
+## 🔐 Безопасность
 
-```bash
-curl -I -k https://localhost:3000/api/plugins/cuid-value-here/download
-# Location: https://example.com/plugin.zip
-```
-
-## 🔐 JWT Authentication
-
-Проект использует JWT для аутентификации. Конфигурация в `.env`:
-
-- `JWT_SECRET` - секретный ключ для подписи токенов
-- `DATABASE_URL` - подключение к Postgres
-- `PORT` - порт сервера
+- Пароли хешируются с использованием bcrypt (соль: 12 раундов)
+- JWT токены действуют 15 минут
+- Refresh токены действуют 7 дней
+- Поддержка CORS для кросс-доменных запросов
 
 ## 🐳 Docker
 
@@ -99,18 +141,11 @@ docker compose up
 - `api` - Fastify API на порту 3000
 - `nginx` - reverse proxy с HTTPS
 
-## 🧪 Тестирование
-
-```bash
-# Проверка health endpoint
-curl -k https://localhost:3000/health
-```
-
 ## 🔨 Технологии
 
 - **Runtime**: Fastify 4
 - **Validation**: Zod
 - **Auth**: @fastify/jwt
+- **Password Hashing**: bcrypt
 - **DB**: Prisma + PostgreSQL
-- **Security**: bcrypt для хеширования паролей
 - **CORS**: @fastify/cors
