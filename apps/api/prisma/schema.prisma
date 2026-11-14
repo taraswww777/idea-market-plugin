@@ -7,16 +7,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Plugin {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  downloadUrl     String
+  version         String
+  authorId        String
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  author          User     @relation("UserToPlugin", fields: [authorId], references: [id])
+}
+
 model User {
-  id       String   @id @default(cuid())
-  email    String   @unique
-  name     String?
-  password String   @map("password_hash")
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  password      String   @map("password_hash")
   
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   
-  posts Post[]
+  plugins       Plugin[]
 }
 
 model Post {

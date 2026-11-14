@@ -3,6 +3,9 @@ import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import { config } from "./config.js";
 import { healthRoute } from "./routes/health.js";
+import { pluginsListRoute } from "./routes/plugins/list.js";
+import { pluginsDetailRoute } from "./routes/plugins/detail.js";
+import { pluginsDownloadRoute } from "./routes/plugins/download.js";
 
 const server = fastify({ logger: { level: process.env.NODE_ENV === "development" ? "debug" : "info" } });
 
@@ -30,10 +33,15 @@ await server.register(jwt, {
   },
 });
 
-// Регистрация health route
+// Health check route
 await server.register(healthRoute, { prefix: "", path: "/health" });
 
-// Плашка для демонстрации работы сервера
+// Plugins routes
+await server.register(pluginsListRoute, { prefix: "/api/plugins", prefixTrailingSlash: true });
+await server.register(pluginsDetailRoute, { prefix: "/api/plugins", prefixTrailingSlash: true });
+await server.register(pluginsDownloadRoute, { prefix: "/api/plugins", prefixTrailingSlash: true });
+
+// Главная страница
 server.get("/", async () => {
   return {
     message: "API is running!",
@@ -48,7 +56,27 @@ server.get("/", async () => {
 // Обработка ошибок
 server.setErrorHandler((error, request, reply) => {
   console.error("Error:", error);
-  reply.status(500).send({ error: "Internal Server Error" });
+  
+  // Для JWT ошибок
+  if (error.name === "JsonWebTokenError") {
+    return reply.status(401).send({ 
+      error: "Unauthorized", 
+      message: "Invalid or expired token" 
+    });
+  }
+  
+  if (error.name === "TokenExpiredError") {
+    return reply.status(401).send({ 
+      error: "Unauthorized", 
+      message: "Token has expired" 
+    });
+  }
+  
+  // Возвращаем стандартную ошибку Fastify
+  return reply.status(error.statusCode || 500).send({
+    error: error.name || "Internal Server Error",
+    message: error.message,
+  });
 });
 
 // Запуск сервера
