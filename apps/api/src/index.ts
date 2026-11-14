@@ -59,39 +59,12 @@ server.get("/", async () => {
 });
 
 // API для регистрации (public)
-server.post("/api/auth/register", async (request, reply) => {
-  const { email, name, password } = request.body;
-
-  // Валидация
-  if (!email || !password) {
-    throw reply.createHttpError(400, "Missing required fields", {
-      message: "Email and password are required",
-    });
-  }
-
-  return reply.createHttpError(422, "Validation failed", {
-    statusCode: 422,
-    error: "Unprocessable Entity",
-    message: "User registration requires email, name, and password",
-  });
-});
+import { registerRoute } from "./routes/auth/register.js";
+await server.register(registerRoute);
 
 // API для входа (public)
-server.post("/api/auth/login", async (request, reply) => {
-  const { email, password } = request.body;
-
-  // Валидация
-  if (!email || !password) {
-    throw reply.createHttpError(400, "Missing required fields", {
-      message: "Email and password are required",
-    });
-  }
-
-  return reply.createHttpError(401, "Unauthorized", {
-    error: "Unauthorized",
-    message: "Login requires email, password and authentication",
-  });
-});
+import { loginRoute } from "./routes/auth/login.js";
+await server.register(loginRoute);
 
 // Plugins routes (protected)
 await server.register(pluginsListRoute, { prefix: "/api/plugins", prefixTrailingSlash: true });

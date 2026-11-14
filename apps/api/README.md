@@ -1,151 +1,124 @@
-# Idea Market API
+# API Documentation - Idea Market Plugin
 
-Fastify-based API для управления плагинами Idea Market.
+## Overview
+REST API for managing plugins, users and authentication. Built with Fastify, Prisma, and PostgreSQL.
 
-## 🚀 Быстрый старт
-
-```bash
-npm install
-npm run dev
+## Base URL
+```
+https://your-domain.com:3443  # Through Nginx (HTTPS)
+or
+http://localhost:3000         # Local development (HTTP)
 ```
 
-## 📁 Структура проекта
-
-```
-apps/api/
-├── prisma/
-│   └── schema.prisma         # База данных модели
-├── src/
-│   ├── db.ts                 # PrismaClient singleton
-│   ├── config.ts             # Конфигурация из env
-│   ├── index.ts              # Main Fastify server
-│   ├── plugins/
-│   │   └── auth.ts           # Аутентификация (JWT, authenticate, requireRole)
-│   ├── repositories/
-│   │   └── plugin.repository.ts  # Repository для плагинов
-│   ├── services/
-│   │   ├── password.service.ts     # Hash/verify паролей
-│   │   └── jwt.service.ts          # JWT sign/verify
-│   └── routes/
-│       ├── health.ts         # GET /health
-│       └── plugins/
-│           ├── list.ts       # GET /api/plugins (список)
-│           ├── detail.ts     # GET /api/plugins/:id
-│           └── download.ts   # GET /api/plugins/:id/download
-```
-
-## 🔐 Аутентификация
-
-API использует JWT для аутентификации. 
-
-### Endpoints
-
-#### Регистрация
-```http
-POST https://localhost:3000/api/auth/register
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "name": "John Doe",
-  "password": "SecurePassword123!"
-}
-```
-
-#### Вход
-```http
-POST https://localhost:3000/api/auth/login
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "SecurePassword123!"
-}
-```
-
-### Использование JWT токена
-
-После успешного входа вы получите токен. Используйте его в заголовках:
-
-```http
-GET https://localhost:3000/api/plugins
-Authorization: Bearer <YOUR_TOKEN>
-```
-
-### Декораторы аутентификации
-
-В роутерах можно использовать декораторы:
-
-```typescript
-await server.register(authPlugin, { prefix: "/protected", prefixTrailingSlash: true });
-```
-
-#### `@authenticate()`
-- Проверяет наличие JWT токена в заголовке Authorization
-- Добавляет данные пользователя в `request.user`
-
-#### `@requireRole(['ADMIN', 'USER'])`
-- Проверяет роль пользователя
-- Возвращает 403 Forbidden, если роль не имеет прав
-
-### Роли пользователей
-
-- **ADMIN** - полный доступ ко всем функциям
-- **USER** - базовый доступ (просмотр, скачивание плагинов)
-
-## 📦 API Endpoints
+## Endpoints
 
 ### Health Check
-- `GET /health` - проверка работоспособности
+- `GET /health` - Server health check (public)
 
-### Регистрация и вход
-- `POST /api/auth/register` - регистрация пользователя
-- `POST /api/auth/login` - вход в систему
+### Authentication
+#### Register User
+- `POST /api/auth/register`
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "securepass123",
+    "name": "John Doe"  // optional
+  }
+  ```
+  Response (201):
+  ```json
+  {
+    "userId": "...",
+    "email": "user@example.com",
+    "message": "User registered successfully"
+  }
+  ```
 
-### Плагины (требуют аутентификации)
-- `GET /api/plugins` - список плагинов (пагинация, поиск)
-- `GET /api/plugins/:id` - плагин по ID
-- `GET /api/plugins/:id/download` - скачивание (302 редирект)
+#### Login
+- `POST /api/auth/login`
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "securepass123"
+  }
+  ```
+  Response (200):
+  ```json
+  {
+    "accessToken": "eyJhbG...",
+    "refreshToken": "eyJhYm...",
+    "user": {
+      "id": "...",
+      "email": "user@example.com",
+      "name": "John Doe",
+      "role": "USER"
+    }
+  }
+  ```
 
-## 📝 Примеры запросов
+### Plugins (Protected - requires JWT token in Authorization header)
+#### List Plugins
+- `GET /api/plugins`
+  Query params:
+  - `q?` - Search query (filters by name/description, optional)
+  - `page?` - Page number (default: 1, min: 1)
+  - `limit?` - Items per page (default: 20, max: 100)
+  - `sort?` - Sort field ("name" | "createdAt", default: "createdAt")
 
-### Список плагинов с аутентификацией
+  Response:
+  ```json
+  {
+    "items": [...],
+    "total": 42,
+    "page": 1,
+    "limit": 20
+  }
+  ```
 
-```bash
-curl -k -H "Authorization: Bearer YOUR_TOKEN" \
-  https://localhost:3000/api/plugins
+#### Get Plugin by ID
+- `GET /api/plugins/:id`
+  Response:
+  ```json
+  {
+    "id": "...",
+    "name": "Plugin Name",
+    "description": "...",
+    "downloadUrl": "https://...",
+    "version": "1.0.0",
+    "authorId": "..."
+  }
+  ```
+
+#### Download Plugin
+- `GET /api/plugins/:id/download`
+  Redirects to downloadUrl (302)
+
+## Error Handling
+All endpoints return standard HTTP error codes:
+- `400` - Bad Request
+- `401` - Unauthorized (missing or invalid token)
+- `403` - Forbidden (insufficient permissions)
+- `404` - Not Found
+- `409` - Conflict (duplicate email)
+- `422` - Validation Error
+- `500` - Internal Server Error
+
+## Authentication
+Protected routes require JWT token in header:
+```
+Authorization: Bearer <accessToken>
 ```
 
-### Поиск плагинов
+### Token Types
+- **Access Token**: 15 minutes expiry
+- **Refresh Token**: 7 days expiry (used for token refresh - TBA)
 
-```bash
-curl -k -H "Authorization: Bearer YOUR_TOKEN" \
-  "https://localhost:3000/api/plugins?q=dark&limit=10"
+## Roles
+- `ADMIN` - Full access to all routes
+- `USER` - Basic plugin access
+
+## CORS
+CORS is enabled. Configure `ALLOWED_ORIGIN` in `.env`:
 ```
-
-## 🔐 Безопасность
-
-- Пароли хешируются с использованием bcrypt (соль: 12 раундов)
-- JWT токены действуют 15 минут
-- Refresh токены действуют 7 дней
-- Поддержка CORS для кросс-доменных запросов
-
-## 🐳 Docker
-
-```bash
-docker compose up
+ALLOWED_ORIGIN=https://your-domain.com
 ```
-
-Сервисы:
-- `db` - PostgreSQL 16
-- `api` - Fastify API на порту 3000
-- `nginx` - reverse proxy с HTTPS
-
-## 🔨 Технологии
-
-- **Runtime**: Fastify 4
-- **Validation**: Zod
-- **Auth**: @fastify/jwt
-- **Password Hashing**: bcrypt
-- **DB**: Prisma + PostgreSQL
-- **CORS**: @fastify/cors
