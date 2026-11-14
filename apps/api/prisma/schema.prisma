@@ -33,4 +33,10 @@ model Plugin {
   
   /// Opposite relation to User.plugins - links back to User
   author          User     @relation("UserPlugins", fields: [authorId], references: [id])
+  
+  /// GIN-index для полнотекстового поиска по названию
+  @@index([name], algorithm: "concurrent")
+  
+  /// GIN-index для полнотекстового поиска по описанию (использует pg_trgm)
+  @@index([description], algorithm: "concurrent", where: { description: { not: null } })
 }
