@@ -62,6 +62,14 @@ server.get("/", async () => {
 import { registerRoute } from "./routes/auth/register.js";
 await server.register(registerRoute);
 
+// API для получения текущего пользователя (protected)
+import { meRoute } from "./routes/auth/me.js";
+await server.register(meRoute);
+
+// Пример защищённого роута для ADMIN только (protected example)
+import { protectedRoute } from "./routes/protected.js";
+await server.register(protectedRoute, { prefix: "/api/_protected", prefixTrailingSlash: true });
+
 // API для входа (public)
 import { loginRoute } from "./routes/auth/login.js";
 await server.register(loginRoute);
@@ -70,6 +78,14 @@ await server.register(loginRoute);
 await server.register(pluginsListRoute, { prefix: "/api/plugins", prefixTrailingSlash: true });
 await server.register(pluginsDetailRoute, { prefix: "/api/plugins", prefixTrailingSlash: true });
 await server.register(pluginsDownloadRoute, { prefix: "/api/plugins", prefixTrailingSlash: true });
+
+// Favorites routes (protected)
+import { favoritesListRoute } from "./routes/favorites/list.js";
+import { favoritesAddRoute } from "./routes/favorites/add.js";
+import { favoritesRemoveRoute } from "./routes/favorites/remove.js";
+await server.register(favoritesListRoute, { prefix: "/api/favorites", prefixTrailingSlash: true });
+await server.register(favoritesAddRoute, { prefix: "/api/favorites", prefixTrailingSlash: true });
+await server.register(favoritesRemoveRoute, { prefix: "/api/favorites", prefixTrailingSlash: true });
 
 // Обработка ошибок
 server.setErrorHandler((error, request, reply) => {
