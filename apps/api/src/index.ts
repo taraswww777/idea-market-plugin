@@ -87,6 +87,10 @@ await server.register(favoritesListRoute, { prefix: "/api/favorites", prefixTrai
 await server.register(favoritesAddRoute, { prefix: "/api/favorites", prefixTrailingSlash: true });
 await server.register(favoritesRemoveRoute, { prefix: "/api/favorites", prefixTrailingSlash: true });
 
+// Admin plugins routes (protected - ADMIN only)
+import { adminPluginsRoute } from "./routes/admin/plugins.js";
+await server.register(adminPluginsRoute, { prefix: "/api/admin/plugins", prefixTrailingSlash: true });
+
 // Обработка ошибок
 server.setErrorHandler((error, request, reply) => {
   console.error("Error:", error);
