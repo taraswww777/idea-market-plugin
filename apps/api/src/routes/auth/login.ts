@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { verifyPassword } from "../../../services/password.service.js";
 import { signToken } from "../../../services/jwt.service.js";
+import { createUnauthorizedError, createInternalServerError } from "../../lib/errors.js";
 
 const loginSchema = z.object({
   body: z.object({
@@ -45,20 +46,14 @@ export const loginRoute: FastifyInstance["register"] = async (fastify, done) => 
         });
 
         if (!user) {
-          return reply.status(401).send({
-            error: "UNAUTHORIZED",
-            message: "Invalid credentials",
-          });
+          throw createUnauthorizedError(fastify);
         }
 
         // Verify password
         const isValid = await verifyPassword(password, user.password);
 
         if (!isValid) {
-          return reply.status(401).send({
-            error: "UNAUTHORIZED",
-            message: "Invalid credentials",
-          });
+          throw createUnauthorizedError(fastify);
         }
 
         // Generate tokens
@@ -77,10 +72,7 @@ export const loginRoute: FastifyInstance["register"] = async (fastify, done) => 
         };
       } catch (error) {
         console.error("Login error:", error);
-        return reply.status(500).send({
-          error: "INTERNAL_SERVER_ERROR",
-          message: "An unexpected error occurred during login",
-        });
+        throw createInternalServerError(fastify, "An unexpected error occurred during login");
       }
     },
   );

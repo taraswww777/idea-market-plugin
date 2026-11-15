@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { findById } from "../../repositories/plugin.repository.js";
 import type { Plugin } from "../../repositories/plugin.repository.js";
+import { createNotFoundError } from "../../lib/errors.js";
 
 export async function pluginsDetailRoute(fastify: FastifyInstance): Promise<void> {
   fastify.get("/:id", async (request) => {
@@ -8,17 +9,13 @@ export async function pluginsDetailRoute(fastify: FastifyInstance): Promise<void
     
     // Проверяем формат ID (должен быть valid cuid)
     if (!id || !/^[\da-f]{24}$/i.test(id)) {
-      throw fastify.createHttpError(
-        400,
-        "Invalid plugin ID format",
-        "Plugin ID must be a valid CUID string"
-      );
+      throw createBadRequestError(fastify, "Invalid plugin ID format");
     }
     
     const plugin = await findById(id);
     
     if (!plugin) {
-      throw fastify.createHttpError(404, "Plugin not found", { id });
+      throw createNotFoundError(fastify, "Plugin", id);
     }
     
     return plugin;

@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import type { Prisma } from "@prisma/client";
+import { createInternalServerError } from "../../lib/errors.js";
 
 /**
  * GET /api/auth/me - Returns current authenticated user information
@@ -33,17 +34,7 @@ export const meRoute: FastifyInstance["register"] = async (fastify, done) => {
       } catch (error) {
         console.error("Error in /api/auth/me:", error);
         
-        if (error.message?.includes("expired") || error.message?.includes("invalid")) {
-          return done(new Error(
-            JSON.stringify({
-              statusCode: 401,
-              error: "Unauthorized",
-              message: "Invalid or expired token",
-            })
-          ));
-        }
-
-        return done(new Error("Internal server error"));
+        throw createInternalServerError(fastify, "An unexpected error occurred while fetching user data");
       }
     },
   );

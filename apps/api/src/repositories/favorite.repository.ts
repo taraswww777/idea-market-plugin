@@ -1,4 +1,5 @@
 import prisma from "../db.js";
+import { findById } from "./plugin.repository.js";
 import type { Prisma } from "@prisma/client";
 
 export interface ListFavoritesResult {
@@ -42,9 +43,16 @@ export async function list(userId: string): Promise<ListFavoritesResult> {
  * 
  * @param userId - идентификатор пользователя
  * @param pluginId - идентификатор плагина
+ * @throws {Error} Если плагин не существует
  */
 export async function add(userId: string, pluginId: string): Promise<Favorite> {
   const favoriteId = `${userId}_${pluginId}`;
+
+  // Проверяем существование плагина перед добавлением
+  const existingPlugin = await findById(pluginId);
+  if (!existingPlugin) {
+    throw new Error(`Plugin with ID ${pluginId} not found`);
+  }
 
   // Используем upsert для идемпотентности (повторное добавление не ошибка)
   return prisma.plugin.upsert({

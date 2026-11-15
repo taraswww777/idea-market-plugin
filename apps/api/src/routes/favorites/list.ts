@@ -1,14 +1,14 @@
 import { FastifyInstance } from "fastify";
 import { verifyToken } from "../../auth/middleware/verify-token.js";
 import { list as listFavorites } from "../../repositories/favorite.repository.js";
-import { createError } from "../../error-handling/create-error.js";
+import { createUnauthorizedError, createInternalServerError } from "../../lib/errors.js";
 
 export async function favoritesListRoute(fastify: FastifyInstance): Promise<void> {
   fastify.get("/", async (request) => {
     const user = await verifyToken(request.headers.authorization);
     
     if (!user) {
-      return createError(401, "Unauthorized");
+      throw createUnauthorizedError(fastify);
     }
 
     const result = await listFavorites(user.id);

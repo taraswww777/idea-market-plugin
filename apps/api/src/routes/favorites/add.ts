@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { verifyToken } from "../../auth/middleware/verify-token.js";
 import { add as addFavorite } from "../../repositories/favorite.repository.js";
-import { createError } from "../../error-handling/create-error.js";
+import { createUnauthorizedError, createBadRequestError, createInternalServerError, createNotFoundError } from "../../lib/errors.js";
 import { z } from "zod";
 
 const AddFavoriteBodySchema = z.object({
@@ -13,13 +13,13 @@ export async function favoritesAddRoute(fastify: FastifyInstance): Promise<void>
     const user = await verifyToken(request.headers.authorization);
     
     if (!user) {
-      return createError(401, "Unauthorized");
+      throw createUnauthorizedError(fastify);
     }
 
     const parsedBody = AddFavoriteBodySchema.safeParse(request.body);
     
     if (!parsedBody.success) {
-      return createError(400, parsedBody.error.errors[0].message);
+      throw createBadRequestError(fastify, parsedBody.error.errors[0].message);
     }
 
     const { pluginId } = parsedBody.data;
@@ -43,7 +43,13 @@ export async function favoritesAddRoute(fastify: FastifyInstance): Promise<void>
       };
     } catch (error) {
       console.error("Error in /favorites add:", error);
-      return createError(500, "Failed to add to favorites");
+      
+      // Проверяем, плагин ли не найден
+      if (error.message?.includes("not found")) {
+        throw createNotFoundError(fastify, "Plugin", pluginId);
+      }
+      
+      throw createInternalServerError(fastify, "Failed to add to favorites");
     }
   });
 

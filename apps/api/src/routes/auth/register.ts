@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { hashPassword } from "../../../services/password.service.js";
+import { createConflictError, createInternalServerError, createValidationErrors } from "../../lib/errors.js";
 
 const registerSchema = z.object({
   body: z.object({
@@ -37,10 +38,7 @@ export const registerRoute: FastifyInstance["register"] = async (fastify, done) 
         });
 
         if (existingUser) {
-          return reply.status(409).send({
-            error: "CONFLICT",
-            message: "User with this email already exists",
-          });
+          throw createConflictError(fastify, "email");
         }
 
         // Hash password
@@ -67,21 +65,17 @@ export const registerRoute: FastifyInstance["register"] = async (fastify, done) 
         });
       } catch (error) {
         console.error("Registration error:", error);
+        
         // Handle Prisma errors
         if (error.code === "P2002") {
           // Unique constraint violation
           const field = error.meta?.fields?.join("_");
           if (field === "email") {
-            return reply.status(409).send({
-              error: "CONFLICT",
-              message: "User with this email already exists",
-            });
+            throw createConflictError(fastify, "email");
           }
         }
-        return reply.status(500).send({
-          error: "INTERNAL_SERVER_ERROR",
-          message: "An unexpected error occurred during registration",
-        });
+        
+        throw createInternalServerError(fastify, "An unexpected error occurred during registration");
       }
     },
   );

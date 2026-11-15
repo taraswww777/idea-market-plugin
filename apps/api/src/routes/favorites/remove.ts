@@ -1,20 +1,27 @@
 import { FastifyInstance } from "fastify";
 import { verifyToken } from "../../auth/middleware/verify-token.js";
 import { remove as removeFavorite } from "../../repositories/favorite.repository.js";
-import { createError } from "../../error-handling/create-error.js";
+import { findById } from "../../repositories/plugin.repository.js";
+import { createUnauthorizedError, createBadRequestError, createNotFoundError, createInternalServerError } from "../../lib/errors.js";
 
 export async function favoritesRemoveRoute(fastify: FastifyInstance): Promise<void> {
   fastify.delete("/", async (request) => {
     const user = await verifyToken(request.headers.authorization);
     
     if (!user) {
-      return createError(401, "Unauthorized");
+      throw createUnauthorizedError(fastify);
     }
 
     const pluginId = request.params.pluginId;
 
     if (!pluginId || typeof pluginId !== "string") {
-      return createError(400, "Invalid pluginId parameter");
+      throw createBadRequestError(fastify, "Invalid pluginId parameter");
+    }
+
+    // Проверяем существование плагина перед удалением
+    const existingPlugin = await findById(pluginId);
+    if (!existingPlugin) {
+      throw createNotFoundError(fastify, "Plugin", pluginId);
     }
 
     try {
@@ -26,7 +33,7 @@ export async function favoritesRemoveRoute(fastify: FastifyInstance): Promise<vo
       };
     } catch (error) {
       console.error("Error in /favorites remove:", error);
-      return createError(500, "Failed to remove from favorites");
+      throw createInternalServerError(fastify, "Failed to remove from favorites");
     }
   });
 
