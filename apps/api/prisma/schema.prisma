@@ -35,8 +35,8 @@ model Plugin {
   author          User     @relation("UserPlugins", fields: [authorId], references: [id])
   
   /// GIN-index для полнотекстового поиска по названию
-  @@index([name], algorithm: "concurrent")
+  @@index([name])
   
   /// GIN-index для полнотекстового поиска по описанию (использует pg_trgm)
-  @@index([description], algorithm: "concurrent", where: { description: { not: null } })
+  @@index([description])
 }
