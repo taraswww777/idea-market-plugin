@@ -1,3 +1,5 @@
+// Схема БД MVP — альтернативный магазин плагинов JetBrains IDE.
+// Соответствует ТЗ (раздел «Модель данных»): User + Role, Plugin с vendor*/sinceBuild/untilBuild, Favorite как отдельная модель.
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,36 +9,44 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String?
-  password      String   @map("password_hash")
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  /// Relation to plugins - a user can have multiple plugins
-  plugins       Plugin[] @relation("UserPlugins")
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(USER)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  favorites    Favorite[]
 }
 
 model Plugin {
-  id              String   @id @default(cuid())
-  name            String
-  description     String?
-  downloadUrl     String
-  version         String
-  authorId        String
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  /// Opposite relation to User.plugins - links back to User
-  author          User     @relation("UserPlugins", fields: [authorId], references: [id])
-  
-  /// GIN-index для полнотекстового поиска по названию
-  @@index([name])
-  
-  /// GIN-index для полнотекстового поиска по описанию (использует pg_trgm)
-  @@index([description])
+  id           String    @id // XML id из plugin.xml, не UUID — задаётся вызывающим (админский эндпоинт)
+  name         String
+  description  String?
+  version      String
+  sinceBuild   String?
+  untilBuild   String?
+  vendorName   String?
+  vendorEmail  String?
+  vendorUrl    String?
+  downloadUrl  String // прямая ссылка на ZIP
+  changeNotes  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  favorites    Favorite[]
+}
+
+model Favorite {
+  userId   String
+  pluginId String
+  createdAt DateTime @default(now())
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plugin   Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@id([userId, pluginId])
 }

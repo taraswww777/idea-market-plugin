@@ -1,99 +1,43 @@
-import { FastifyInstance } from "fastify";
+// Единый формат ошибок API (ТЗ раздел 8): { error: { code, message, details? } }
+// Все роуты бросают ApiError; setErrorHandler в index.ts отдаёт его клиенту.
 
-export interface ErrorDTO {
-  error: string;
-  message: string;
-  statusCode?: number;
-  code?: string;
+export class ApiError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    public readonly code: string,
+    message: string,
+    public readonly details?: unknown
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
 }
 
-/**
- * Единая функция создания ошибки с форматированием
- */
-export function createError(
-  fastify: FastifyInstance,
-  statusCode: number,
-  errorType: string,
-  details?: any
-): ErrorDTO {
-  return {
-    error: errorType,
-    message: typeof details === "string" ? details : JSON.stringify(details),
-    statusCode,
-  };
+export function badRequest(message: string, details?: unknown): ApiError {
+  return new ApiError(400, "BAD_REQUEST", message, details);
 }
 
-/**
- * Создает ошибку 404 (Not Found)
- */
-export function createNotFoundError(
-  fastify: FastifyInstance,
-  resource: string,
-  id?: string
-): ErrorDTO {
-  return createError(fastify, 404, "NOT_FOUND", {
-    resource,
-    ...(id && { id }),
-  });
+export function unauthorized(message = "Authentication required"): ApiError {
+  return new ApiError(401, "UNAUTHORIZED", message);
 }
 
-/**
- * Создает ошибку 400 (Bad Request)
- */
-export function createBadRequestError(
-  fastify: FastifyInstance,
-  message: string
-): ErrorDTO {
-  return createError(fastify, 400, "BAD_REQUEST", message);
+export function forbidden(message = "Access denied"): ApiError {
+  return new ApiError(403, "FORBIDDEN", message);
 }
 
-/**
- * Создает ошибку 401 (Unauthorized)
- */
-export function createUnauthorizedError(fastify: FastifyInstance): ErrorDTO {
-  return createError(fastify, 401, "UNAUTHORIZED", "Authentication required");
+export function notFound(resource: string, id?: string): ApiError {
+  const details = id ? { resource, id } : { resource };
+  return new ApiError(404, "NOT_FOUND", `${resource} not found`, details);
 }
 
-/**
- * Создает ошибку 500 (Internal Server Error)
- */
-export function createInternalServerError(
-  fastify: FastifyInstance,
-  message: string = "Internal server error"
-): ErrorDTO {
-  return createError(fastify, 500, "INTERNAL_SERVER_ERROR", message);
+export function conflict(message: string, details?: unknown): ApiError {
+  return new ApiError(409, "CONFLICT", message, details);
 }
 
-/**
- * Создает ошибку 409 (Conflict)
- */
-export function createConflictError(
-  fastify: FastifyInstance,
-  field?: string
-): ErrorDTO {
-  return createError(fastify, 409, "CONFLICT", field ? `Field '${field}' already exists` : "Resource already exists");
+export function validationError(details: unknown): ApiError {
+  return new ApiError(422, "VALIDATION_ERROR", "Validation failed", details);
 }
 
-/**
- * Создает ошибку 422 (Unprocessable Entity) для валидации Zod
- */
-export function createValidationErrors(
-  fastify: FastifyInstance,
-  validationErrors: Record<string, string[]>
-): ErrorDTO {
-  const messages = Object.entries(validationErrors)
-    .map(([field, errors]) => `${field}: ${errors.join(", ")}`)
-    .join("; ");
-  
-  return createError(fastify, 422, "VALIDATION_ERROR", messages);
+export function internalServerError(message = "Internal server error"): ApiError {
+  return new ApiError(500, "INTERNAL_SERVER_ERROR", message);
 }
-
-export default {
-  createError,
-  createNotFoundError,
-  createBadRequestError,
-  createUnauthorizedError,
-  createInternalServerError,
-  createConflictError,
-  createValidationErrors,
-};

@@ -1,21 +1,28 @@
 import { z } from "zod";
 
-// Schema для валидации конфигурации из env
+// Валидация конфигурации из env (ТЗ раздел 3). При старте сервера — fail fast, если обязательные переменные отсутствуют.
 const ConfigSchema = z.object({
-  PORT: z.string().transform((val) => parseInt(val, 10)).default(3000),
-  DATABASE_URL: z.string().url(),
-  JWT_SECRET: z.string().min(1),
+  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  DATABASE_URL: z.string().url("DATABASE_URL must be a valid URL"),
+  JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
   ALLOWED_ORIGIN: z.string().default("*"),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
 
-// Чтение и валидация конфигурации
-const config = ConfigSchema.parse({
-  PORT: process.env.PORT || "3000",
-  DATABASE_URL: process.env.DATABASE_URL!,
-  JWT_SECRET: process.env.JWT_SECRET || "dev-secret",
-  ALLOWED_ORIGIN: process.env.ALLOWED_ORIGIN || "*",
-});
+function loadConfig(): Config {
+  const result = ConfigSchema.safeParse({
+    PORT: process.env.PORT || "3000",
+    DATABASE_URL: process.env.DATABASE_URL,
+    JWT_SECRET: process.env.JWT_SECRET,
+    ALLOWED_ORIGIN: process.env.ALLOWED_ORIGIN || "*",
+  });
 
-export { config };
+  if (!result.success) {
+    const issues = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    throw new Error(`Invalid configuration: ${issues}`);
+  }
+  return result.data;
+}
+
+export const config = loadConfig();

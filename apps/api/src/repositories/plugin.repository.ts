@@ -8,6 +8,8 @@ export interface ListPluginsParams {
   sort: "name" | "createdAt";
 }
 
+export type Plugin = Prisma.PluginGetPayload<Record<string, never>>;
+
 export interface ListPluginsResult {
   items: Plugin[];
   total: number;
@@ -15,95 +17,51 @@ export interface ListPluginsResult {
   limit: number;
 }
 
-export type Plugin = Prisma.PluginGetPayload<{
-  author: true;
-}>;
+// Полнотекстовый поиск по name/description через pg_trgm (GIN-индексы, миграция add_fulltext_search_extension).
+// Выбор подхода зафиксирован здесь: gin_trgm_ops + оператор % — он использует созданные индексы и работает с кириллицей/латиницей.
+// Для запросов короче 3 символов trigram-оператор неэффективен (нет триграмм), поэтому fallback на ILIKE.
+const MIN_TRIGRAM_QUERY_LENGTH = 3;
 
-/**
- * Получает список плагинов с пагинацией и поиском
- * 
- * ВАЖНО: Текущая реализация использует contains-фильтр (case-insensitive через mode: "insensitive")
- * Это базовая реализация. Для более умного поиска рекомендуется:
- * - pg_trgm + GIN-index с similarity("%query%", 'pg_trgm') для трigram-поиска
- * - tsvector (to_tsvector, to_tsquery) для полноценного текстового поиска
- * - Опционально: plainto_tsquery для простого LIKE-подобного синтаксиса
- * 
- * Индексы pg_trgm созданы в миграции AddFulltextSearchExtension.
- * @param q - поисковый запрос (фильтр через ILike)
- * @param page - номер страницы (с 1)
- * @param limit - количество записей на странице (max 100)
- * @param sort - поле сортировки: name или createdAt
- */
 export async function list(params: ListPluginsParams): Promise<ListPluginsResult> {
   const { q, page, limit, sort } = params;
-  
-  // Ограничиваем limit до 100
-  const safeLimit = Math.min(limit, 100);
-  
-  // Строим фильтр WHERE
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  const offset = (page - 1) * safeLimit;
+  const orderBySql = sort === "name" ? 'ORDER BY name ASC' : 'ORDER BY "createdAt" DESC';
+
+  if (q && q.trim().length >= MIN_TRIGRAM_QUERY_LENGTH) {
+    // Raw SQL с оператором % — использует idx_plugin_name_trgm / idx_plugin_description_trgm.
+    const rows = await prisma.$queryRaw<Plugin[]>`
+      SELECT * FROM "Plugin"
+      WHERE name % ${q} OR COALESCE(description, '') % ${q}
+      ${Prisma.sql`${orderBySql}`}
+      LIMIT ${safeLimit} OFFSET ${offset}
+    `;
+    const countRows = await prisma.$queryRaw<[{ total: bigint }]>`
+      SELECT COUNT(*)::bigint AS total FROM "Plugin"
+      WHERE name % ${q} OR COALESCE(description, '') % ${q}
+    `;
+    return { items: rows, total: Number(countRows[0]?.total ?? 0), page, limit: safeLimit };
+  }
+
+  // Fallback (короткий запрос или без q) — Prisma contains/ILIKE.
   const where: Prisma.PluginWhereInput = {};
-  
-  if (q) {
+  if (q && q.trim()) {
     where.OR = [
       { name: { contains: q, mode: "insensitive" } },
-      { description: { contains: q, mode: "insensitive" } }
+      { description: { contains: q, mode: "insensitive" } },
     ];
-    // Примечание: для трigram-поиска с GIN-индексом использовать:
-    // where.name: { contains: `%${q}%` } (с индексом pg_trgm через similarity())
-  
-  // Сортируем
-  const orderBy: Prisma.PluginOrderByRelationDeepInput[] = [];
-  if (sort === "name") {
-    orderBy.push({ name: "asc" });
-  } else {
-    orderBy.push({ createdAt: "desc" });
   }
-  
-  // Получаем общее количество
-  const total = await prisma.plugin.count({ where });
-  
-  // Вычисляем offset для пагинации
-  const offset = (page - 1) * safeLimit;
-  
-  // Получаем список
-  const items = await prisma.plugin.findMany({
-    where,
-    orderBy,
-    skip: offset,
-    take: safeLimit,
-    include: {
-      author: {
-        select: {
-          id: true,
-          name: true,
-          email: true
-        }
-      }
-    },
-  });
-  
-  return {
-    items,
-    total,
-    page,
-    limit: safeLimit,
-  };
+
+  const orderBy: Prisma.PluginOrderByWithRelationInput = sort === "name" ? { name: "asc" } : { createdAt: "desc" };
+
+  const [total, items] = await Promise.all([
+    prisma.plugin.count({ where }),
+    prisma.plugin.findMany({ where, orderBy, skip: offset, take: safeLimit }),
+  ]);
+
+  return { items, total, page, limit: safeLimit };
 }
 
-/**
- * Получает плагин по ID
- */
 export async function findById(id: string): Promise<Plugin | null> {
-  return prisma.plugin.findUnique({
-    where: { id },
-    include: {
-      author: {
-        select: {
-          id: true,
-          name: true,
-          email: true
-        }
-      }
-    },
-  });
+  return prisma.plugin.findUnique({ where: { id } });
 }
