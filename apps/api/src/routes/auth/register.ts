@@ -1,86 +1,72 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { hashPassword } from "../../../services/password.service.js";
-import { createConflictError, createInternalServerError, createValidationErrors } from "../../lib/errors.js";
+import { hashPassword } from "../../services/password.service.js";
+import { conflict, badRequest } from "../../lib/errors.js";
 
-const registerSchema = z.object({
-  body: z.object({
-    email: z.string().email("Invalid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
-    name: z.string().optional(), // optional for MVP
-  }),
+const RegisterBodySchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  name: z.string().optional(), // optional for MVP
 });
 
-export const registerRoute: FastifyInstance["register"] = async (fastify, done) => {
-  fastify.post<{ Body: typeof registerSchema.infer }>(
-    "/api/auth/register",
-    {
-      schema: registerSchema,
+export async function registerRoute(fastify: FastifyInstance): Promise<void> {
+  fastify.post<{ 
+    Body: z.infer<typeof RegisterBodySchema>;
+    Reply: { id: string; email: string };
+  }>("/api/auth/register", {
+    schema: {
+      body: RegisterBodySchema,
       response: {
-        201: z.object({
-          userId: z.string(),
-          email: z.string(),
-          message: z.string(),
-        }),
-        409: z.object({
-          error: z.literal("CONFLICT"),
-          message: z.string(),
-        }),
+        201: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            email: { type: "string" },
+          },
+        },
+        409: {
+          type: "object",
+          properties: {
+            error: { const: "CONFLICT" },
+            message: { type: "string" },
+          },
+        },
       },
     },
-    async (request, reply) => {
-      try {
-        const { email, password } = request.body;
+  }, async (request, reply) => {
+    const { email, password } = request.body;
 
-        // Check if user already exists
-        const existingUser = await fastify.db.user.findUnique({
-          where: { email },
-        });
+    // Check if user already exists
+    const existingUser = await fastify.db.user.findUnique({ where: { email } });
+    
+    if (existingUser) {
+      throw conflict("email", "Email already registered");
+    }
 
-        if (existingUser) {
-          throw createConflictError(fastify, "email");
-        }
+    // Hash password
+    const hashedPassword = await hashPassword(password);
 
-        // Hash password
-        const hashedPassword = await hashPassword(password);
+    // Create user with role USER (default in schema)
+    const newUser = await fastify.db.user.create({
+      data: {
+        email,
+        passwordHash: hashedPassword,
+        role: "USER", // explicitly set for MVP
+      },
+      select: {
+        id: true,
+        email: true,
+      },
+    });
 
-        // Create user
-        const newUser = await fastify.db.user.create({
-          data: {
-            email,
-            password: hashedPassword,
-            name: request.body.name || null,
-          },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-          },
-        });
+    return reply.status(201).send({
+      id: newUser.id,
+      email: newUser.email,
+    });
+  });
 
-        return reply.status(201).send({
-          userId: newUser.id,
-          email: newUser.email,
-          message: "User registered successfully",
-        });
-      } catch (error) {
-        console.error("Registration error:", error);
-        
-        // Handle Prisma errors
-        if (error.code === "P2002") {
-          // Unique constraint violation
-          const field = error.meta?.fields?.join("_");
-          if (field === "email") {
-            throw createConflictError(fastify, "email");
-          }
-        }
-        
-        throw createInternalServerError(fastify, "An unexpected error occurred during registration");
-      }
-    },
-  );
-
-  done();
-};
-
-export default registerRoute;
+  // OPTIONS for CORS
+  fastify.options("/", async () => {
+    return { status: "ok" };
+  });
+}

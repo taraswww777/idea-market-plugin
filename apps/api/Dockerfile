@@ -1,5 +1,4 @@
 # Multi-stage build for Fastify API
-
 # Stage 1: Dependencies
 FROM node:20-alpine AS deps
 WORKDIR /app

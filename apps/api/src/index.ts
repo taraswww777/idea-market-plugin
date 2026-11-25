@@ -1,46 +1,32 @@
 import fastify from "fastify";
 import cors from "@fastify/cors";
-import jwt from "@fastify/jwt";
 import { config } from "./config.js";
 import { healthRoute } from "./routes/health.js";
 import { pluginsListRoute } from "./routes/plugins/list.js";
 import { pluginsDetailRoute } from "./routes/plugins/detail.js";
 import { pluginsDownloadRoute } from "./routes/plugins/download.js";
-import { authPlugin } from "./plugins/auth.js";
+import { registerRoute } from "./routes/auth/register.js";
+import { loginRoute } from "./routes/auth/login.js";
+import { meRoute } from "./routes/auth/me.js";
+import { favoritesListRoute } from "./routes/favorites/list.js";
+import { favoritesAddRoute } from "./routes/favorites/add.js";
+import { favoritesRemoveRoute } from "./routes/favorites/remove.js";
+import { adminPluginsRoute } from "./routes/admin/plugins.js";
+import { updatePluginsXmlRoute } from "./routes/update-plugins-xml.js";
+import { startBackgroundBuild } from "./services/update-plugins-xml.service.js";
+import z from "zod";
 
 const server = fastify({ logger: { level: process.env.NODE_ENV === "development" ? "debug" : "info" } });
 
-// Регистрация плагинов
+// Регистрация CORS
 await server.register(cors, {
   origin: config.ALLOWED_ORIGIN,
   credentials: true,
 });
 
-// Регистрация аутентификации с @fastify/jwt
-await server.register(authPlugin, {
+// Регистрация @fastify/jwt (основные методы jwt.sign/jwt.verify будут доступны после регистрации)
+await server.register(require("@fastify/jwt"), {
   secret: config.JWT_SECRET,
-  signAsync: async (payload) => {
-    return new Promise((resolve, reject) => {
-      jwt.sign(payload, config.JWT_SECRET, { expiresIn: "15m" }, (err, token) => {
-        if (err) reject(err);
-        else resolve(token);
-      });
-    });
-  },
-  verifyAsync: async (token, done) => {
-    try {
-      const decoded = await new Promise<string>((resolve, reject) => {
-        jwt.verify(token as string, config.JWT_SECRET, (err, decoded) => {
-          if (err) reject(err);
-          else resolve(decoded!);
-        });
-      });
-      
-      done(null, JSON.parse(decoded));
-    } catch {
-      done(new Error("Invalid token"), null);
-    }
-  },
 });
 
 // Health check route (public endpoint)
@@ -59,61 +45,69 @@ server.get("/", async () => {
 });
 
 // API для регистрации (public)
-import { registerRoute } from "./routes/auth/register.js";
 await server.register(registerRoute);
 
-// API для получения текущего пользователя (protected)
-import { meRoute } from "./routes/auth/me.js";
-await server.register(meRoute);
-
-// Пример защищённого роута для ADMIN только (protected example)
-import { protectedRoute } from "./routes/protected.js";
-await server.register(protectedRoute, { prefix: "/api/_protected", prefixTrailingSlash: true });
-
 // API для входа (public)
-import { loginRoute } from "./routes/auth/login.js";
 await server.register(loginRoute);
 
-// Plugins routes (protected)
+// API для текущего пользователя (protected)
+await server.register(meRoute, { prefix: "/api/auth", path: "/me" });
+
+// API для списка плагинов (public)
 await server.register(pluginsListRoute, { prefix: "/api/plugins", prefixTrailingSlash: true });
+
+// API для детальной информации о плагине (public)
 await server.register(pluginsDetailRoute, { prefix: "/api/plugins", prefixTrailingSlash: true });
+
+// API для скачивания плагина (public redirect)
 await server.register(pluginsDownloadRoute, { prefix: "/api/plugins", prefixTrailingSlash: true });
 
-// Favorites routes (protected)
-import { favoritesListRoute } from "./routes/favorites/list.js";
-import { favoritesAddRoute } from "./routes/favorites/add.js";
-import { favoritesRemoveRoute } from "./routes/favorites/remove.js";
+// API избранного (protected)
 await server.register(favoritesListRoute, { prefix: "/api/favorites", prefixTrailingSlash: true });
 await server.register(favoritesAddRoute, { prefix: "/api/favorites", prefixTrailingSlash: true });
 await server.register(favoritesRemoveRoute, { prefix: "/api/favorites", prefixTrailingSlash: true });
 
-// Admin plugins routes (protected - ADMIN only)
-import { adminPluginsRoute } from "./routes/admin/plugins.js";
+// Админ-эндпоинты для управления каталогом (protected, ADMIN only)
 await server.register(adminPluginsRoute, { prefix: "/api/admin/plugins", prefixTrailingSlash: true });
 
-// Обработка ошибок
-server.setErrorHandler((error, request, reply) => {
+// XML каталог для IDE (public, no trailing slash)
+await server.register(updatePluginsXmlRoute, { prefix: "", path: "/updatePlugins.xml" });
+
+// Обработка ошибок — единый формат ответа
+server.setErrorHandler((error, _request, reply) => {
   console.error("Error:", error);
 
   // Для JWT ошибок
   if (error.name === "JsonWebTokenError") {
     return reply.status(401).send({ 
-      error: "Unauthorized", 
-      message: "Invalid or expired token" 
+      error: { code: "UNAUTHORIZED", message: "Invalid or expired token" } 
     });
   }
 
   if (error.name === "TokenExpiredError") {
     return reply.status(401).send({ 
-      error: "Unauthorized", 
-      message: "Token has expired" 
+      error: { code: "UNAUTHORIZED", message: "Token has expired" } 
     });
   }
 
-  // Возвращаем стандартную ошибку Fastify
-  return reply.status(error.statusCode || 500).send({
-    error: error.name || "Internal Server Error",
-    message: error.message,
+  // Для ошибок ApiError из lib/errors.ts — они имеют statusCode
+  if (error.statusCode) {
+    const details = error.details || undefined;
+    return reply.status(error.statusCode).send({
+      error: { code: error.code, message: error.message, ...(details && { details }) },
+    });
+  }
+
+  // Для Zod ошибок — 422
+  if (error instanceof z.ZodError) {
+    return reply.status(422).send({ 
+      error: { code: "VALIDATION_ERROR", message: "Validation failed" } 
+    });
+  }
+
+  // По умолчанию — внутренняя ошибка
+  return reply.status(500).send({
+    error: { code: "INTERNAL_SERVER_ERROR", message: error.message || "Internal server error" },
   });
 });
 
@@ -129,3 +123,6 @@ const start = async () => {
 };
 
 await start();
+
+// Фоновая сборка XML при старте
+startBackgroundBuild();

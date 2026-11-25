@@ -1,27 +1,32 @@
 import { FastifyInstance } from "fastify";
 import { findById } from "../../repositories/plugin.repository.js";
-import type { Plugin } from "../../repositories/plugin.repository.js";
-import { createNotFoundError } from "../../lib/errors.js";
+import type { Prisma } from "@prisma/client";
+import { notFound } from "../../lib/errors.js";
 
 export async function pluginsDetailRoute(fastify: FastifyInstance): Promise<void> {
-  fastify.get("/:id", async (request) => {
-    const id = request.params.id;
-    
-    // Проверяем формат ID (должен быть valid cuid)
-    if (!id || !/^[\da-f]{24}$/i.test(id)) {
-      throw createBadRequestError(fastify, "Invalid plugin ID format");
-    }
-    
-    const plugin = await findById(id);
+  fastify.get<{ 
+    Params: { id: string };
+    Reply: Prisma.PluginGetPayload<Record<string, never>>;
+  }>("/:id", {
+    schema: {
+      params: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+        },
+      },
+    },
+  }, async (request) => {
+    const plugin = await findById(request.params.id);
     
     if (!plugin) {
-      throw createNotFoundError(fastify, "Plugin", id);
+      throw notFound("Plugin", request.params.id);
     }
-    
+
     return plugin;
   });
 
-  // Обработка OPTIONS для CORS
+  // OPTIONS for CORS
   fastify.options("/:id", async () => {
     return { status: "ok" };
   });

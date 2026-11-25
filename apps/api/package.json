@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsx -e \"console.log('Build complete')\"",
+    "build": "tsc",
     "migrate": "prisma migrate dev",
     "generate": "prisma generate",
     "seed:admin": "tsx scripts/seed-admin.ts",

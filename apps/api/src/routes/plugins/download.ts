@@ -1,28 +1,33 @@
 import { FastifyInstance } from "fastify";
 import { findById } from "../../repositories/plugin.repository.js";
-import type { Plugin } from "../../repositories/plugin.repository.js";
-import { createBadRequestError, createNotFoundError } from "../../lib/errors.js";
+import type { Prisma } from "@prisma/client";
+import { notFound } from "../../lib/errors.js";
 
 export async function pluginsDownloadRoute(fastify: FastifyInstance): Promise<void> {
-  fastify.get("/:id/download", async (request, reply) => {
-    const id = request.params.id;
-    
-    // Проверяем формат ID (должен быть valid cuid)
-    if (!id || !/^[\da-f]{24}$/i.test(id)) {
-      throw createBadRequestError(fastify, "Invalid plugin ID format");
-    }
-    
-    const plugin = await findById(id);
+  fastify.get<{ 
+    Params: { id: string };
+    Reply: { Location: string; Redirect: true };
+  }>("/:id/download", {
+    schema: {
+      params: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const plugin = await findById(request.params.id);
     
     if (!plugin) {
-      throw createNotFoundError(fastify, "Plugin", id);
+      throw notFound("Plugin", request.params.id);
     }
-    
-    // Возвращаем 302 редирект на downloadUrl
+
+    // Return 302 redirect to downloadUrl
     return reply.redirect(302, plugin.downloadUrl);
   });
 
-  // Обработка OPTIONS для CORS
+  // OPTIONS for CORS
   fastify.options("/:id/download", async () => {
     return { status: "ok" };
   });

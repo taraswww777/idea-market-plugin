@@ -1,7 +1,5 @@
-certs/
-.git/
-.gitignore
-*.md
-docker-compose.yml
-Dockerfile
-.dockerignore
+node_modules
+dist
+.env
+*.log
+logs/

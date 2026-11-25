@@ -1,144 +1,145 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import prisma from "../../db.js";
-import { findById, upsertByPluginId } from "../../repositories/plugin.repository.js";
-import { requireRoleMiddleware } from "../../../plugins/auth.js";
 import type { Prisma } from "@prisma/client";
-import { createBadRequestError, createInternalServerError, createNotFoundError } from "../../lib/errors.js";
+import { authenticate, requireRole } from "../../lib/auth.js";
+import { findById } from "../../repositories/plugin.repository.js";
+import { markDirty } from "../../services/update-plugins-xml.service.js";
 
-/**
- * Zod-схема для создания/обновления плагина
- */
-const pluginsBodySchema = z.object({
+// Plugin body schema (matches new Prisma.Plugin model)
+const AdminPluginsBodySchema = z.object({
+  id: z.string().min(1), // plugin ID from XML (arbitrary string)
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
-  downloadUrl: z.string().url("Valid URL is required"),
   version: z.string().min(1, "Version is required"),
-  ideaVersion: z.string().min(1, "Idea Version is required"),
+  sinceBuild: z.string().optional(),
+  untilBuild: z.string().optional(),
+  vendorName: z.string().optional(),
+  vendorEmail: z.string().email("Invalid email address").or(z.literal("")),
+  vendorUrl: z.string().url("Valid URL is required").or(z.literal("")),
+  downloadUrl: z.string().url("Valid download URL is required"),
   changeNotes: z.string().optional(),
-  vendor: z.string().optional(),
 });
 
-export const adminPluginsRoute: FastifyInstance["register"] = async (fastify, done) => {
-  // POST /api/admin/plugins - создаёт или обновляет плагин (upsert по id)
+export async function adminPluginsRoute(fastify: FastifyInstance): Promise<void> {
+  // POST /api/admin/plugins — create plugin by id
   fastify.post<{ 
-    Reply: Prisma.PluginGetPayload<{ author: false }>; 
-    Body: typeof pluginsBodySchema.infer; 
-  }>("/api/admin/plugins",
-    {
-      handler: requireRoleMiddleware, // Требует ADMIN роль
-      schema: {
-        body: pluginsBodySchema,
-      },
-      response: {
-        201: z.object({
-          id: z.string(),
-          name: z.string(),
-          description: z.string().nullable(),
-          downloadUrl: z.string().url(),
-          version: z.string(),
-          ideaVersion: z.string(),
-          changeNotes: z.string().nullable(),
-          vendor: z.string().nullable(),
-          authorId: z.string().nullable(),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const body = request.body;
+    Reply: Prisma.PluginGetPayload<Record<string, never>>;
+    Body: z.infer<typeof AdminPluginsBodySchema>;
+  }>("/api/admin/plugins", {
+    preHandler: [authenticate],
+  }, async (request, reply) => {
+    const body = request.body;
 
-      try {
-        // Создаём плагин с новым ID (для upsert создаем новый плагин)
-        const plugin = await prisma.plugin.upsert({
-          where: { id: crypto.randomUUID() }, // Новый случайный ID
-          create: {
-            id: crypto.randomUUID(),
-            name: body.name,
-            description: body.description ?? null,
-            downloadUrl: body.downloadUrl,
-            version: body.version,
-            ideaVersion: body.ideaVersion,
-            changeNotes: body.changeNotes ?? null,
-            vendor: body.vendor ?? null,
-          },
-          update: {
-            name: body.name,
-            description: body.description ?? null,
-            downloadUrl: body.downloadUrl,
-            version: body.version,
-            ideaVersion: body.ideaVersion,
-            changeNotes: body.changeNotes ?? null,
-            vendor: body.vendor ?? null,
-          },
-        });
+    const parsedBody = AdminPluginsBodySchema.safeParse(body);
+    
+    if (!parsedBody.success) {
+      return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "Invalid plugin data" } });
+    }
 
-        // Вызываем markDirty после изменения
-        const { markDirty } = await import("../../services/update-plugins-xml.service.js");
-        markDirty();
+    try {
+      // Create plugin (no upsert on POST — caller should manage duplicates)
+      const plugin = await prisma.plugin.create({
+        data: parsedBody.data,
+      });
 
-        return reply.status(201).send(plugin);
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          throw createBadRequestError(fastify, error.errors);
-        }
-        console.error("Upsert plugin error:", error);
-        throw createInternalServerError(fastify, "Failed to create/update plugin");
+      markDirty();
+
+      return reply.status(201).send(plugin);
+    } catch (error) {
+      console.error("Create plugin error:", error);
+
+      if (error instanceof Error && error.message.includes("duplicate")) {
+        return reply.status(409).send({ error: { code: "CONFLICT", message: `Plugin with ID ${body.id} already exists` } });
       }
-    },
-  );
 
-  // DELETE /api/admin/plugins/:id - удаляет плагин по ID
+      return reply.status(500).send({ error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to create plugin" } });
+    }
+  });
+
+  // PUT /api/admin/plugins/:id — upsert plugin by id
+  fastify.put<{ 
+    Params: { id: string };
+    Reply: Prisma.PluginGetPayload<Record<string, never>>;
+    Body: z.infer<typeof AdminPluginsBodySchema>;
+  }>("/api/admin/plugins/:id", {
+    preHandler: [authenticate],
+  }, async (request, reply) => {
+    const body = request.body;
+
+    // Validate id matches URL param
+    if (request.params.id !== body.id) {
+      return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "ID mismatch" } });
+    }
+
+    const parsedBody = AdminPluginsBodySchema.safeParse(body);
+    
+    if (!parsedBody.success) {
+      return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "Invalid plugin data" } });
+    }
+
+    try {
+      // Upsert by id
+      const plugin = await prisma.plugin.upsert({
+        where: { id: body.id },
+        create: parsedBody.data,
+        update: parsedBody.data, // no-op for now — caller can specify partial updates later
+      });
+
+      markDirty();
+
+      return plugin;
+    } catch (error) {
+      console.error("Upsert plugin error:", error);
+
+      if (error instanceof Error && error.message.includes("duplicate")) {
+        return reply.status(409).send({ error: { code: "CONFLICT", message: `Plugin with ID ${body.id} already exists` } });
+      }
+
+      return reply.status(500).send({ error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to upsert plugin" } });
+    }
+  });
+
+  // DELETE /api/admin/plugins/:id — delete by id
   fastify.delete<{ 
     Reply: void;
     Params: { id: string };
-  }>("/api/admin/plugins/:id",
-    {
-      handler: requireRoleMiddleware, // Требует ADMIN роль
-      schema: {
-        params: z.object({
-          id: z.string().regex(/^[\da-f]{24}$/i, "Invalid plugin ID format"),
-        }),
-      },
-      response: {
-        204: z.void(),
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
+  }>("/api/admin/plugins/:id", {
+    preHandler: [authenticate],
+  }, async (request, reply) => {
+    const id = request.params.id;
 
-      try {
-        // Проверяем существование плагина перед удалением
-        const existingPlugin = await findById(id);
+    if (!id || typeof id !== "string") {
+      return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "Invalid ID" } });
+    }
 
-        if (!existingPlugin) {
-          throw createNotFoundError(fastify, "Plugin", id);
-        }
+    try {
+      // Check existence before delete
+      const existingPlugin = await findById(id);
 
-        // Удаляем плагин
-        await prisma.plugin.delete({
-          where: { id },
-        });
-
-        // Вызываем markDirty после удаления
-        const { markDirty } = await import("../../services/update-plugins-xml.service.js");
-        markDirty();
-
-        return reply.status(204).send();
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          throw createBadRequestError(fastify, error.errors);
-        }
-        console.error("Delete plugin error:", error);
-        throw createInternalServerError(fastify, "Failed to delete plugin");
+      if (!existingPlugin) {
+        return reply.status(404).send({ error: { code: "NOT_FOUND", message: `Plugin with ID ${id} not found` } });
       }
-    },
-  );
 
-  // Обработка OPTIONS для CORS
+      // Delete plugin (cascade deletes favorites via schema FK onDelete Cascade)
+      await prisma.plugin.delete({ where: { id } });
+
+      markDirty();
+
+      return reply.status(204).send();
+    } catch (error) {
+      console.error("Delete plugin error:", error);
+
+      if (error instanceof Error && error.message.includes("constraint")) {
+        return reply.status(409).send({ error: { code: "CONFLICT", message: `Cannot delete plugin with ID ${id}` } });
+      }
+
+      return reply.status(500).send({ error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to delete plugin" } });
+    }
+  });
+
+  // OPTIONS for CORS
   fastify.options<{ Params: { id: string } }>("/api/admin/plugins/:id", async () => {
     return { status: "ok" };
   });
-};
-
-// Экспортируем как route-функцию
-export const adminPluginsRouteHandler = adminPluginsRoute;
+}

@@ -1,31 +1,22 @@
 import { FastifyInstance } from "fastify";
-import { verifyToken } from "../../auth/middleware/verify-token.js";
+import type { Prisma } from "@prisma/client";
+import { authenticate, AuthUser } from "../../lib/auth.js";
 import { remove as removeFavorite } from "../../repositories/favorite.repository.js";
-import { findById } from "../../repositories/plugin.repository.js";
-import { createUnauthorizedError, createBadRequestError, createNotFoundError, createInternalServerError } from "../../lib/errors.js";
 
 export async function favoritesRemoveRoute(fastify: FastifyInstance): Promise<void> {
-  fastify.delete("/", async (request) => {
-    const user = await verifyToken(request.headers.authorization);
-    
-    if (!user) {
-      throw createUnauthorizedError(fastify);
-    }
-
+  fastify.delete<{ 
+    Params: { pluginId: string };
+  }>("/api/favorites/:pluginId", {
+    preHandler: [fastify.authenticate], // requires valid token; sets request.user
+  }, async (request, reply) => {
     const pluginId = request.params.pluginId;
 
     if (!pluginId || typeof pluginId !== "string") {
-      throw createBadRequestError(fastify, "Invalid pluginId parameter");
-    }
-
-    // Проверяем существование плагина перед удалением
-    const existingPlugin = await findById(pluginId);
-    if (!existingPlugin) {
-      throw createNotFoundError(fastify, "Plugin", pluginId);
+      return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "Invalid pluginId parameter" } });
     }
 
     try {
-      await removeFavorite(user.id, pluginId);
+      await removeFavorite(request.user.sub, pluginId);
 
       return {
         success: true,
@@ -33,12 +24,18 @@ export async function favoritesRemoveRoute(fastify: FastifyInstance): Promise<vo
       };
     } catch (error) {
       console.error("Error in /favorites remove:", error);
-      throw createInternalServerError(fastify, "Failed to remove from favorites");
+
+      // If plugin doesn't exist or favorite doesn't exist — treat as not found (idempotent delete behavior)
+      if (error.message?.includes("not found")) {
+        return reply.status(404).send({ error: { code: "NOT_FOUND", message: `Plugin with ID ${pluginId} not found` } });
+      }
+
+      return reply.status(500).send({ error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to remove from favorites" } });
     }
   });
 
-  // Обработка OPTIONS для CORS
-  fastify.options("/", async () => {
+  // OPTIONS for CORS
+  fastify.options("/:pluginId", async () => {
     return { status: "ok" };
   });
 }

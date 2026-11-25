@@ -1,83 +1,66 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { verifyPassword } from "../../../services/password.service.js";
-import { signToken } from "../../../services/jwt.service.js";
-import { createUnauthorizedError, createInternalServerError } from "../../lib/errors.js";
+import { signToken } from "../../services/jwt.service.js";
+import { hashPassword, verifyPassword } from "../../services/password.service.js";
+import { badRequest, unauthorized } from "../../lib/errors.js";
 
-const loginSchema = z.object({
-  body: z.object({
-    email: z.string().email("Invalid email address"),
-    password: z.string(),
-  }),
+const LoginBodySchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string(),
 });
 
-export const loginRoute: FastifyInstance["register"] = async (fastify, done) => {
-  fastify.post<{ Body: typeof loginSchema.infer }>(
-    "/api/auth/login",
-    {
-      schema: loginSchema,
+export async function loginRoute(fastify: FastifyInstance): Promise<void> {
+  fastify.post<{ 
+    Body: z.infer<typeof LoginBodySchema>;
+    Reply: { accessToken: string };
+  }>("/api/auth/login", {
+    schema: {
+      body: LoginBodySchema,
       response: {
-        200: z.object({
-          accessToken: z.string(),
-          refreshToken: z.string(),
-          user: z.object({
-            id: z.string(),
-            email: z.string(),
-            name: z.string().nullable(),
-            role: z.enum(["ADMIN", "USER"]),
-          }),
-        }),
+        200: {
+          type: "object",
+          properties: {
+            accessToken: { type: "string" },
+          },
+        },
+        401: {
+          type: "object",
+          properties: {
+            error: { const: "UNAUTHORIZED" },
+            message: { type: "string" },
+          },
+        },
       },
     },
-    async (request, reply) => {
-      const { email, password } = request.body;
+  }, async (request, reply) => {
+    const { email, password } = request.body;
 
-      try {
-        // Find user by email
-        const user = await fastify.db.user.findUnique({
-          where: { email },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-            password: true,
-          },
-        });
+    // Find user by email
+    const userWithHash = await fastify.db.user.findUnique({ where: { email } });
 
-        if (!user) {
-          throw createUnauthorizedError(fastify);
-        }
+    if (!userWithHash) {
+      throw unauthorized("Invalid credentials");
+    }
 
-        // Verify password
-        const isValid = await verifyPassword(password, user.password);
+    // Verify password (using verifyPassword to compare against stored hash)
+    const isValidPassword = await verifyPassword(password, userWithHash.passwordHash);
 
-        if (!isValid) {
-          throw createUnauthorizedError(fastify);
-        }
+    if (!isValidPassword) {
+      throw unauthorized("Invalid credentials");
+    }
 
-        // Generate tokens
-        const accessToken = signToken(user, "ACCESS");
-        const refreshToken = signToken(user, "REFRESH");
+    // Sign access token (15m expiry)
+    const accessToken = signToken({
+      sub: userWithHash.id,
+      email: userWithHash.email,
+      role: userWithHash.role,
+    });
 
-        return {
-          accessToken,
-          refreshToken,
-          user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-          },
-        };
-      } catch (error) {
-        console.error("Login error:", error);
-        throw createInternalServerError(fastify, "An unexpected error occurred during login");
-      }
-    },
-  );
+    return reply.send({ accessToken });
+  });
 
-  done();
-};
-
-export default loginRoute;
+  // OPTIONS for CORS
+  fastify.options("/", async () => {
+    return { status: "ok" };
+  });
+}

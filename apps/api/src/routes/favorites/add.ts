@@ -1,60 +1,54 @@
 import { FastifyInstance } from "fastify";
-import { verifyToken } from "../../auth/middleware/verify-token.js";
+import type { Prisma } from "@prisma/client";
+import { authenticate, AuthUser } from "../../lib/auth.js";
 import { add as addFavorite } from "../../repositories/favorite.repository.js";
-import { createUnauthorizedError, createBadRequestError, createInternalServerError, createNotFoundError } from "../../lib/errors.js";
-import { z } from "zod";
-
-const AddFavoriteBodySchema = z.object({
-  pluginId: z.string().min(1, "pluginId is required"),
-});
 
 export async function favoritesAddRoute(fastify: FastifyInstance): Promise<void> {
-  fastify.post("/", async (request) => {
-    const user = await verifyToken(request.headers.authorization);
-    
-    if (!user) {
-      throw createUnauthorizedError(fastify);
-    }
+  fastify.post<{ 
+    Params: { pluginId: string };
+    Body: { pluginId?: string };
+    Reply: { success: true; id: string; name: string; description: string | null; version: string; sinceBuild: string | null; untilBuild: string | null; vendorName: string | null; vendorEmail: string | null; vendorUrl: string | null; downloadUrl: string; changeNotes: string | null };
+  }>("/api/favorites/:pluginId", {
+    preHandler: [fastify.authenticate], // requires valid token; sets request.user
+  }, async (request, reply) => {
+    const pluginId = request.params.pluginId || request.body.pluginId;
 
-    const parsedBody = AddFavoriteBodySchema.safeParse(request.body);
-    
-    if (!parsedBody.success) {
-      throw createBadRequestError(fastify, parsedBody.error.errors[0].message);
+    if (!pluginId) {
+      return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "pluginId is required" } });
     }
-
-    const { pluginId } = parsedBody.data;
 
     try {
-      const favorite = await addFavorite(user.id, pluginId);
+      const favorite = await addFavorite(request.user.sub, pluginId);
 
+      // Return full plugin data
       return {
         success: true,
-        data: {
-          id: favorite.id,
-          name: favorite.name,
-          description: favorite.description,
-          favoriteId: favorite.favoriteId,
-          author: {
-            id: favorite.author.id,
-            name: favorite.author.name,
-            email: favorite.author.email,
-          },
-        },
+        id: favorite.id,
+        name: favorite.name,
+        description: favorite.description,
+        version: favorite.version,
+        sinceBuild: favorite.sinceBuild,
+        untilBuild: favorite.untilBuild,
+        vendorName: favorite.vendorName,
+        vendorEmail: favorite.vendorEmail,
+        vendorUrl: favorite.vendorUrl,
+        downloadUrl: favorite.downloadUrl,
+        changeNotes: favorite.changeNotes,
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error in /favorites add:", error);
-      
-      // Проверяем, плагин ли не найден
+
+      // Plugin not found error
       if (error.message?.includes("not found")) {
-        throw createNotFoundError(fastify, "Plugin", pluginId);
+        return reply.status(404).send({ error: { code: "NOT_FOUND", message: `Plugin with ID ${pluginId} not found` } });
       }
-      
-      throw createInternalServerError(fastify, "Failed to add to favorites");
+
+      return reply.status(500).send({ error: { code: "INTERNAL_SERVER_ERROR", message: "Failed to add to favorites" } });
     }
   });
 
-  // Обработка OPTIONS для CORS
-  fastify.options("/", async () => {
+  // OPTIONS for CORS
+  fastify.options("/:pluginId", async () => {
     return { status: "ok" };
   });
 }
