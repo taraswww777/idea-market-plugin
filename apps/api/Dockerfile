@@ -3,7 +3,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json ./
-COPY ../../tsconfig.base.json ./
+COPY ../tsconfig.base.json ./
 COPY ./tsconfig.json ./
 RUN npm install
 
@@ -23,7 +23,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY package.json ./
-COPY tsconfig.base.json ./
+COPY ../tsconfig.base.json ./
 COPY ./tsconfig.json ./
 # Копируем .env для runtime переменных
 COPY .env ./
