@@ -3,6 +3,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json ./
+COPY tsconfig.base.json ./
+COPY apps/api/tsconfig.json ./
 RUN npm install
 
 # Stage 2: Build
@@ -10,14 +12,21 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Генерация Prisma client перед билдом
+RUN npm run generate
+# Сборка TypeScript
 RUN npm run build
 
-# Stage 3: Runtime
+# Stage 3: Runtime (minimal runtime без node_modules)
 FROM node:20-alpine AS runtime
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY package.json ./
+COPY tsconfig.base.json ./
+COPY apps/api/tsconfig.json ./
+# Копируем .env для runtime переменных
+COPY .env ./
 
 ENV NODE_ENV=production
 EXPOSE 3000
