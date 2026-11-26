@@ -109,6 +109,14 @@ BASE_URL=http://localhost:3000 bash scripts/smoke.sh
 | JWT auth | @fastify/jwt + bcrypt для хеширования паролей |
 | Single-format errors | `{ error: { code, message, details? } }` во всех ответах |
 
+## Git History
+
+| Commit | Описание | Ссылка |
+|--------|----------|--------|
+| [1753cfb](https://github.com/taraswww777/idea-market-plugin/commit/1753cfb) | docs: TASK-8.2 completed | ✅ |
+| [626bea3](https://github.com/taraswww777/idea-market-plugin/commit/626bea3) | chore: завершить TASK-8.2 | ✅ |
+| [104f35a](https://github.com/taraswww777/idea-market-plugin/commit/104f35a) | fix: исправить TypeScript build | ✅ |
+
 ## License
 
 MIT
