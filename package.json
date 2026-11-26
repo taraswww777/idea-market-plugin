@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "start": "docker compose up -d",
     "dev": "npm run dev --workspace=apps/api",
     "build": "npm run build --workspace=apps/api",
     "migrate": "npm run migrate --workspace=apps/api",
