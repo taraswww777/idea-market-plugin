@@ -1,0 +1,7 @@
+# Docker ignore file for apps/api build context
+node_modules/
+.git/
+*.md
+.env.local
+.env.*.local
+.DS_Store
