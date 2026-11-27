@@ -1,4 +1,5 @@
-# Docker build with explicit paths for docker-bake support
+# Multi-stage build for Fastify API
+# Stage 1: Dependencies (npm instead of yarn)
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY ../package.json ./
@@ -22,8 +23,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY ../../tsconfig.base.json ./
-COPY ./tsconfig.json ./
-# Копируем .env для runtime переменных
 COPY .env ./
 
 ENV NODE_ENV=production
