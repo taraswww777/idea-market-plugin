@@ -5,7 +5,7 @@ WORKDIR /app
 # Copy all files from root project context
 COPY . .
 
-# Install dependencies
+# Install dependencies (including prisma)
 RUN npm install
 
 # Generate Prisma client
