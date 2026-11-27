@@ -3,6 +3,7 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 
 # Copy all files from root project context (tsconfig.base.json, package.json, etc.)
+COPY . ../tsconfig.base.json ./tsconfig.base.json
 COPY . .
 
 # Install dependencies
