@@ -8,14 +8,14 @@ COPY . .
 # Install dependencies (including prisma)
 RUN npm install
 
-# Generate Prisma client in deps stage too
-RUN npx prisma generate
-
 # Build TypeScript
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Генерация Prisma client перед билдом
+RUN npx prisma generate
+# Сборка TypeScript
 RUN npm run build
 
 # Runtime stage
