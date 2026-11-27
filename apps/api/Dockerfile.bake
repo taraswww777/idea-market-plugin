@@ -1,24 +1,18 @@
-# Docker build for Fastify API - copy entire workspace first
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY . .
-RUN npm install && rm -rf *
-
-# Stage 2: Build
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-# Генерация Prisma client перед билдом
-RUN npm run generate
-# Сборка TypeScript
-RUN npm run build
-
-# Stage 3: Runtime (minimal runtime без node_modules)
+# Docker build for Fastify API - single stage from root context
 FROM node:20-alpine AS runtime
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
+
+# Copy all files from root project context (includes tsconfig.base.json, package.json, etc.)
+COPY . .
+
+# Install dependencies
+RUN npm install
+
+# Generate Prisma client
+RUN npm run generate
+
+# Build TypeScript
+RUN npm run build
 
 ENV NODE_ENV=production
 EXPOSE 3000
