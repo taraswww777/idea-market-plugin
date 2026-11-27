@@ -1,8 +1,4 @@
 node_modules
 dist
-.env
 *.log
 logs/
-
-# Include tsconfig.base.json in build context
-KEEP:tsconfig.base.json
