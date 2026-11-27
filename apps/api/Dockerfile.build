@@ -1,29 +1,32 @@
 # Multi-stage build for Fastify API
-# Stage 1: Dependencies (npm instead of yarn)
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY ../package.json ./
-COPY ../../tsconfig.base.json ./
-COPY ./tsconfig.json ./
+
+# Copy all files from root project context (tsconfig.base.json, package.json, tsconfig.json)
+COPY ../../../../../tsconfig.base.json ./tsconfig.base.json
+COPY ../package.json ./package.json
+COPY ./tsconfig.json ./tsconfig.json
+
 RUN npm install
 
-# Stage 2: Build
+# Generate Prisma client
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Генерация Prisma client перед билдом
+
+# Generate Prisma client before build
 RUN npm run generate
-# Сборка TypeScript
+
+# Build TypeScript
 RUN npm run build
 
-# Stage 3: Runtime (minimal runtime без node_modules)
+# Runtime stage
 FROM node:20-alpine AS runtime
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY ../../tsconfig.base.json ./
-COPY ../package.json ./
+
 ENV NODE_ENV=production
 EXPOSE 3000
 
