@@ -23,8 +23,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY ../../tsconfig.base.json ./
-COPY .env ./
-
+COPY ../package.json ./
 ENV NODE_ENV=production
 EXPOSE 3000
 
