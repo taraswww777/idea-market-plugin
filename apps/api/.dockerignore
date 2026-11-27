@@ -6,4 +6,5 @@ node_modules/
 .env.*.local
 .DS_Store
 
-# Keep all json files (needed for tsconfig.base.json)
+# Keep tsconfig.base.json in build context
+KEEP:tsconfig.base.json
