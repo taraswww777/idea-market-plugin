@@ -19,6 +19,8 @@ RUN npx tsc
 # Runtime stage
 FROM node:20-alpine AS runtime
 WORKDIR /app
+# Копируем tsconfig.base.json из корневого контекста
+COPY ../tsconfig.base.json ./tsconfig.base.json
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
