@@ -1,7 +1,7 @@
 # Docker build with explicit paths for docker-bake support
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY ./tsconfig.base.json ./tsconfig.base.json
+COPY /d/ws/my/idea-market-plugin/tsconfig.base.json ./tsconfig.base.json
 COPY ./package.json ./
 COPY ./tsconfig.json ./
 RUN npm install
@@ -21,7 +21,7 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY ./tsconfig.base.json ./tsconfig.base.json
+COPY /d/ws/my/idea-market-plugin/tsconfig.base.json ./tsconfig.base.json
 COPY ./tsconfig.json ./
 # Копируем .env для runtime переменных
 COPY .env ./
