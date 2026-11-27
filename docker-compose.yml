@@ -19,7 +19,7 @@ services:
   api:
     build:
       context: ./apps/api
-      dockerfile: Dockerfile.build
+      dockerfile: Dockerfile.bake
     container_name: ideamarket_api
     environment:
       - NODE_ENV=development
