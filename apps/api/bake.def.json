@@ -1,0 +1,15 @@
+{
+  "targets": {
+    "api": {
+      "dockerfile": "Dockerfile.bake",
+      "args": {},
+      "mounts": [
+        {
+          "source": "${HOME}/ws/my/idea-market-plugin",
+          "target": "/workspace",
+          "type": "bind"
+        }
+      ]
+    }
+  }
+}

@@ -2,8 +2,8 @@
 FROM node:20-alpine AS runtime
 WORKDIR /app
 
-# Copy tsconfig.base.json from root project directory
-COPY /d/ws/my/idea-market-plugin/tsconfig.base.json ./tsconfig.base.json
+# Copy tsconfig.base.json from root project directory (/workspace in baked context)
+COPY /workspace/tsconfig.base.json ./tsconfig.base.json
 
 # Copy all other files from apps/api build context
 COPY . .
