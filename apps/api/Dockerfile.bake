@@ -1,17 +1,14 @@
-# Docker build for Fastify API - single stage from root context
+# Docker build for Fastify API - explicit bake definition inline
 FROM node:20-alpine AS runtime
 WORKDIR /app
 
-# Copy tsconfig.base.json from root project directory (/workspace in baked context)
-COPY /workspace/tsconfig.base.json ./tsconfig.base.json
-
-# Copy all other files from apps/api build context
+# Copy all files from root project context (tsconfig.base.json, package.json, etc.)
 COPY . .
 
 # Install dependencies
 RUN npm install
 
-# Generate Prisma client
+# Generate Prisma client  
 RUN npm run generate
 
 # Build TypeScript
