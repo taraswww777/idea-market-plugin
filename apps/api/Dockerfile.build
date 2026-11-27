@@ -1,12 +1,11 @@
-# Multi-stage build for Fastify API
+# Multi-stage build for Fastify API - copy entire root context first
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Copy all files from root project context (tsconfig.base.json, package.json, tsconfig.json)
-COPY /d/ws/my/idea-market-plugin/tsconfig.base.json ./tsconfig.base.json
-COPY ../package.json ./package.json
-COPY /d/ws/my/idea-market-plugin/tsconfig.json ./tsconfig.json
+# Copy all files from root project context
+COPY . .
 
+# Install dependencies
 RUN npm install
 
 # Generate Prisma client
