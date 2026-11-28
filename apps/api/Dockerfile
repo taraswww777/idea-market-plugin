@@ -1,31 +1,28 @@
-# Multi-stage build for Fastify API
-# Stage 1: Dependencies (npm instead of yarn)
+# Multi-stage build for Fastify API - copy entire root context first
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY ../package.json ./
-COPY ../../tsconfig.base.json ./
-COPY ./tsconfig.json ./
+
+# Copy all files from root project context
+COPY . .
+
+# Install dependencies (including prisma)
 RUN npm install
 
-# Stage 2: Build
+# Build TypeScript (Prisma client должен быть сгенерирован на хост-машине через npm run generate)
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Генерация Prisma client перед билдом
-RUN npm run generate
-# Сборка TypeScript
-RUN npm run build
+# Сборка TypeScript напрямую (без workspace синтаксиса)
+RUN npx tsc
 
-# Stage 3: Runtime (minimal runtime без node_modules)
+# Runtime stage
 FROM node:20-alpine AS runtime
 WORKDIR /app
+# Копируем tsconfig.base.json из корневого контекста
+COPY ../tsconfig.base.json ./tsconfig.base.json
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY ../../tsconfig.base.json ./
-COPY ./tsconfig.json ./
-# Копируем .env для runtime переменных
-COPY .env ./
 
 ENV NODE_ENV=production
 EXPOSE 3000
