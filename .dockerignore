@@ -1,4 +1,65 @@
+# Зависимости — во всех воркспейсах
 node_modules
+**/node_modules
+
+# Сборка
 dist
+**/dist
+build
+**/build
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Логи
 *.log
-logs/
+**/*.log
+logs
+**/logs
+
+# Git
+.git
+.gitignore
+.gitattributes
+.github
+.gitlab-ci.yml
+.gitlab/
+
+# Секреты и окружение
+.env
+.env.*
+!.env.example
+certs
+**/certs
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Docker / compose
+Dockerfile*
+**/Dockerfile*
+docker-compose*.yml
+compose*.yml
+.dockerignore
+
+# Тесты и покрытие
+coverage
+**/coverage
+**/*.test.*
+**/*.spec.*
+**/__tests__
+**/__mocks__
+
+# Документация и мусор
+README.md
+CHANGELOG.md
+docs
+**/*.md
+# если в api есть нужные md (например, для генерации) — раскомментируйте
+!apps/api/**/*.md
+.DS_Store
+Thumbs.db
+.idea
+.vscode
+*.swp
